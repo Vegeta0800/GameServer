@@ -23,6 +23,9 @@ std::unordered_map<SOCKET, char*> g_ips;
 
 std::unordered_map<SOCKET, std::string> g_clients;
 
+std::unordered_map<char*, std::string> loggedIps;
+std::vector<std::string> rooms;
+
 //Handels one clients data. Recieves data from one client.
 //Then Sends it to all the other clients.
 DWORD WINAPI ClientSession(LPVOID lpParameter)

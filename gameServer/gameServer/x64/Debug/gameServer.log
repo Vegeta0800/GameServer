@@ -1,2 +1,4 @@
-﻿  server.cpp
-  gameServer.vcxproj -> C:\Users\raffi\source\repos\gameServer\x64\Debug\gameServer.exe
+﻿  main.cpp
+  server.cpp
+  Generating Code...
+  gameServer.vcxproj -> D:\Documents\Code\GameServer\gameServer\x64\Debug\gameServer.exe
