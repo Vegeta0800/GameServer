@@ -36,20 +36,29 @@ DWORD WINAPI ClientSession(LPVOID lpParameter)
 	//Recieve and Send Data
 	int iResult; //Bytes recieved
 	int iSendResult;
-	char buff[sizeof(LoginData)];
+	char buff[sizeof(Data)];
 
-	bool loggedIn = false;
 	// Receive until the peer shuts down the connection
 	do
 	{
-		if (!loggedIn)
-		{
-			//Recieve data from the clientSocket.
-			iResult = recv(ClientSocket, buff, sizeof(LoginData), 0);
+		//Recieve data from the clientSocket.
+		iResult = recv(ClientSocket, buff, sizeof(Data), 0);
 
-			if (iResult > 0)
+		if (iResult > 0)
+		{
+			Data data = Data();
+			data = *(Data*)buff;
+
+			printf("Data %s", buff);
+
+			switch (data.ID)
 			{
-				LoginData loginData = *(LoginData*)buff;
+			case 0:
+			{
+				printf("Data2 %s", buff);
+
+				LoginData loginData = LoginData();
+				loginData = *(LoginData*)&data;
 
 				printf("Recieved: %d bytes from: %s \n", iResult, g_ips[ClientSocket]);
 				printf("Name: %s, Password: %s", loginData.name.c_str(), loginData.password.c_str());
@@ -66,52 +75,16 @@ DWORD WINAPI ClientSession(LPVOID lpParameter)
 					printf("Sending data failed. Error code: %d\n", WSAGetLastError());
 					break;
 				}
+
+				break;
 			}
-			//If there is a result that isnt connection closing, then recieve it and send to all other clients.
-			//If connection is closing
-			else if (iResult == 0)
-				printf("Connection to %s closing...\n", g_ips[ClientSocket]);
+			}
+
 		}
-		else
-		{
-			//RoomPacket buff;
-			//RoomPacket readBuff = RoomPacket();
-			//memset(&buff, 0, sizeof(buff));
-
-			////Recieve data from the clientSocket.
-			//iResult = recv(ClientSocket, (char*)(&buff), sizeof(buff), 0);
-
-			//if (iResult > 0)
-			//{
-			//	//Recieve the message and resize it before sending it back.
-			//	std::string message = "";
-			//	message.resize(iResult);
-
-			//	// Send the message to all the other clients active right now.
-			//	for (SOCKET socket : g_sockets)
-			//	{
-			//		//If the socket is valid and not this socket.
-			//		if (socket != SOCKET_ERROR && socket != ClientSocket)
-			//		{
-			//			//Send the message.
-			//			iSendResult = send(socket, message.c_str(), iResult, 0);
-			//			printf("Send: %d bytes to: %s \n", iResult, g_ips[socket]);
-
-			//			//Error handling.
-			//			if (iSendResult == SOCKET_ERROR)
-			//			{
-			//				printf("Sending data failed. Error code: %d\n", WSAGetLastError());
-			//				break;
-			//			}
-			//		}
-			//	}
-
-			//}
-			////If there is a result that isnt connection closing, then recieve it and send to all other clients.
-			////If connection is closing
-			//else if (iResult == 0)
-			//	printf("Connection to %s closing...\n", g_ips[ClientSocket]);
-		}
+		//If there is a result that isnt connection closing, then recieve it and send to all other clients.
+		//If connection is closing
+		else if (iResult == 0)
+			printf("Connection to %s closing...\n", g_ips[ClientSocket]);
 	} while (iResult > 0);
 
 	// Shutdown the clientSocket for sending. Because there wont be any data sent anymore.

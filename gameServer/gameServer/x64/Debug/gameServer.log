@@ -1,4 +1,5 @@
 ﻿  main.cpp
   server.cpp
   Generating Code...
-  gameServer.vcxproj -> D:\Documents\Code\GameServer\gameServer\x64\Debug\gameServer.exe
+  LINK : C:\Users\raffi\Documents\GameServer\gameServer\x64\Debug\gameServer.exe not found or not built by the last incremental link; performing full link
+  gameServer.vcxproj -> C:\Users\raffi\Documents\GameServer\gameServer\x64\Debug\gameServer.exe
