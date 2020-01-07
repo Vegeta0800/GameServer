@@ -3,23 +3,20 @@
 #include <string>
 
 #pragma pack(push, 1)
-struct Data
-{
-	std::string data;
-	int ID;
-};
-#pragma pack(pop)
-
-//ID 0
-#pragma pack(push, 1)
 struct LoginData
 {
-	std::string name;
-	std::string password;
+	char name[32];
+	char password[32];
 };
 #pragma pack(pop)
 
-
+#pragma pack(push, 1)
+struct RoomData
+{
+	char name[32];
+	bool created;
+};
+#pragma pack(pop)
 
 class Server
 {

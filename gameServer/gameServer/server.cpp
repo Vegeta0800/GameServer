@@ -15,16 +15,17 @@
 #pragma comment(lib, "Ws2_32.lib")
 
 #define DEFAULT_PORT 12307 //Use any port you want. Has to be in port forwarding settings.
-#define DEFAULT_BUFLEN 64
+#define DEFAULT_BUFLEN sizeof(LoginData)
 
 //Global variables so the other threads can use their information.
 std::vector<SOCKET> g_sockets;
+std::vector<SOCKET> g_loggedSockets;
+std::vector<char*> g_rooms;
 std::unordered_map<SOCKET, char*> g_ips;
 
-std::unordered_map<SOCKET, std::string> g_clients;
+std::unordered_map<SOCKET, char*> onlineClients;
 
-std::unordered_map<char*, std::string> loggedIps;
-std::vector<std::string> rooms;
+std::unordered_map<char*, uint8_t> rooms;
 
 //Handels one clients data. Recieves data from one client.
 //Then Sends it to all the other clients.
@@ -36,35 +37,39 @@ DWORD WINAPI ClientSession(LPVOID lpParameter)
 	//Recieve and Send Data
 	int iResult; //Bytes recieved
 	int iSendResult;
-	char buff[sizeof(Data)];
+	char buff[DEFAULT_BUFLEN];
+
+	bool loggedIn = false;
+	bool inRoom = false;
+
+	bool roomError = false;
 
 	// Receive until the peer shuts down the connection
 	do
 	{
 		//Recieve data from the clientSocket.
-		iResult = recv(ClientSocket, buff, sizeof(Data), 0);
+		if (!loggedIn)
+			iResult = recv(ClientSocket, buff, sizeof(LoginData), 0);
+		else if (loggedIn && !inRoom)
+			iResult = recv(ClientSocket, buff, sizeof(RoomData), 0);
 
 		if (iResult > 0)
 		{
-			Data data = Data();
-			data = *(Data*)buff;
-
-			printf("Data %s", buff);
-
-			switch (data.ID)
+			if (!loggedIn)
 			{
-			case 0:
-			{
-				printf("Data2 %s", buff);
-
 				LoginData loginData = LoginData();
-				loginData = *(LoginData*)&data;
+				loginData = *(LoginData*)&buff;
 
 				printf("Recieved: %d bytes from: %s \n", iResult, g_ips[ClientSocket]);
-				printf("Name: %s, Password: %s", loginData.name.c_str(), loginData.password.c_str());
+				printf("Name: %s, Password: %s\n", loginData.name, loginData.password);
 
+				//INSERT DATABASE CHECK
 				char c[1];
 				c[0] = 1;
+
+				loggedIn = true;
+				onlineClients[ClientSocket] = loginData.name;
+				g_loggedSockets.push_back(ClientSocket);
 
 				iSendResult = send(ClientSocket, c, 1, 0);
 				printf("Send: %d bytes to: %s \n", iSendResult, g_ips[ClientSocket]);
@@ -73,13 +78,88 @@ DWORD WINAPI ClientSession(LPVOID lpParameter)
 				if (iSendResult == SOCKET_ERROR)
 				{
 					printf("Sending data failed. Error code: %d\n", WSAGetLastError());
-					break;
+					return 0;
 				}
 
-				break;
-			}
-			}
+				if (g_rooms.size() != 0)
+				{
+					for (int i = 0; i < g_rooms.size(); i++)
+					{
+						RoomData data = RoomData();
 
+						memset(data.name, 0, 32);
+						for (int j = 0; j < 32; j++)
+						{
+							data.name[j] = g_rooms[i][j];
+						}
+
+						data.created = true;
+
+						int iSendResult = send(ClientSocket, (const char*)&data, sizeof(RoomData), 0);
+						printf("Send: %d bytes to: %s \n", iSendResult, g_ips[ClientSocket]);
+
+						//Error handling.
+						if (iSendResult == SOCKET_ERROR)
+						{
+							printf("Sending data failed. Error code: %d\n", WSAGetLastError());
+							return 0;
+						}
+					}
+				}
+			}
+			else
+			{
+				if (!inRoom)
+				{
+					RoomData data = RoomData();
+					data = *(RoomData*)&buff;
+
+					printf("Recieved: %d bytes from: %s \n", iResult, g_ips[ClientSocket]);
+
+					if (data.created)
+					{
+						rooms[data.name] = 1;
+						g_rooms.push_back(data.name);
+						printf("%s created a new room!\n", data.name);
+					}
+					else
+					{
+						if (rooms[data.name] == 1)
+						{
+							rooms[data.name] = 2;
+							printf("%s joined a %s's room!\n", onlineClients[ClientSocket], data.name);
+						}
+						else
+						{
+							printf("%s's room is full!\n", onlineClients[ClientSocket]);
+							roomError = true;
+						}
+					}
+
+					if (!roomError)
+					{
+						for (SOCKET s : g_loggedSockets)
+						{
+							if (s != ClientSocket)
+							{
+								iSendResult = send(s, buff, iResult, 0);
+								printf("Send: %d bytes to: %s \n", iSendResult, g_ips[ClientSocket]);
+
+								//Error handling.
+								if (iSendResult == SOCKET_ERROR)
+								{
+									printf("Sending data failed. Error code: %d\n", WSAGetLastError());
+									return 0;
+								}
+							}
+						}
+
+						inRoom = true;
+					}
+
+					roomError = false;
+				}
+			}
 		}
 		//If there is a result that isnt connection closing, then recieve it and send to all other clients.
 		//If connection is closing
