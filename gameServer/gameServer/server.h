@@ -2,6 +2,8 @@
 #include <winsock2.h>
 #include <string>
 
+class DataBase;
+
 struct Client
 {
 	SOCKET socket;

@@ -1,11 +1,13 @@
+
 #include "server.h"
-#include <string>
 
 int main()
 {
-	Server server;
+	Server* server = new Server();
 
-	server.Startup();
+	server->Startup();
+
+	delete server;
 
 	return 0;
 }

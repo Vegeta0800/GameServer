@@ -10,6 +10,7 @@
 #include <thread>
 
 #include "server.h"
+#include "database.h"
 
 // link with Ws2_32.lib
 #pragma comment(lib, "Ws2_32.lib")
@@ -22,6 +23,8 @@
 std::vector<Client*> g_clients;
 std::vector<std::pair<Client*, Client*>> g_rooms;
 std::unordered_map<std::string, int> g_roomsIndecies;
+
+DataBase* dataBase;
 
 //Handels one clients data. Recieves data from one client.
 //Then Sends it to all the other clients.
@@ -62,14 +65,19 @@ void ClientSession(Client* client)
 				loginData = *(LoginData*)&buff;
 
 				printf("Recieved: %d bytes from: %s \n", iResult, client->ip.c_str());
-				printf("Name: %s, Password: %s\n", loginData.name, loginData.password);
 
-				//INSERT DATABASE CHECK
+				//Database check
 				char c[1];
-				c[0] = 1;
+				
+				if (dataBase->LoginQuery(loginData.name, loginData.password))
+				{
+					c[0] = 1;
+					client->loggedIn = true;
+					client->name = loginData.name;
+				}
+				else
+					c[0] = 0;
 
-				client->loggedIn = true;
-				client->name = loginData.name;
 
 				iSendResult = send(client->socket, c, 1, 0);
 				printf("Send: %d bytes to: %s \n", iSendResult, client->ip.c_str());
@@ -81,30 +89,33 @@ void ClientSession(Client* client)
 					return;
 				}
 
-				if (g_rooms.size() != 0)
+				if (c[0] == 1)
 				{
-					for (int i = 0; i < g_rooms.size(); i++)
+					if (g_rooms.size() != 0)
 					{
-						RoomData data = RoomData();
-
-						memset(data.name, 0, 32);
-						for (int j = 0; j < 32; j++)
+						for (int i = 0; i < g_rooms.size(); i++)
 						{
-							data.name[j] = g_rooms[i].first->name[j];
+							RoomData data = RoomData();
 
-							if (g_rooms[i].first->name[j] == '\0') break;
-						}
+							memset(data.name, 0, 32);
+							for (int j = 0; j < 32; j++)
+							{
+								data.name[j] = g_rooms[i].first->name[j];
 
-						data.created = true;
+								if (g_rooms[i].first->name[j] == '\0') break;
+							}
 
-						int iSendResult = send(client->socket, (const char*)&data, sizeof(RoomData), 0);
-						printf("Send: %d bytes to: %s \n", iSendResult, client->ip.c_str());
+							data.created = true;
 
-						//Error handling.
-						if (iSendResult == SOCKET_ERROR)
-						{
-							printf("Sending data failed. Error code: %d\n", WSAGetLastError());
-							return;
+							int iSendResult = send(client->socket, (const char*)&data, sizeof(RoomData), 0);
+							printf("Send: %d bytes to: %s \n", iSendResult, client->ip.c_str());
+
+							//Error handling.
+							if (iSendResult == SOCKET_ERROR)
+							{
+								printf("Sending data failed. Error code: %d\n", WSAGetLastError());
+								return;
+							}
 						}
 					}
 				}
@@ -193,17 +204,18 @@ void ClientSession(Client* client)
 					{
 						char mess[16];
 
-						int i = 0;
-						for (i < 15; i++;)
+						int j = 0;
+						for (int i = 0; i < 15; i++)
 						{
 							mess[i] = g_rooms[client->roomID].first->ip[i];
+							j++;
 
 							if (g_rooms[client->roomID].first->ip[i] == '\0') break;
 						}
-						i++;
-						mess[i] = 1;
+						j++;
+						mess[j] = 1;
 
-						iSendResult = send(g_rooms[client->roomID].first->socket, mess, (i + 1), 0);
+						iSendResult = send(g_rooms[client->roomID].first->socket, mess, (j + 1), 0);
 						printf("Send: %d bytes to: %s \n", iSendResult, g_rooms[client->roomID].first->name.c_str());
 
 						//Error handling.
@@ -213,9 +225,9 @@ void ClientSession(Client* client)
 							return;
 						}
 
-						mess[i] = 0;
+						mess[j] = 0;
 
-						iSendResult = send(g_rooms[client->roomID].second->socket, mess, (i + 1), 0);
+						iSendResult = send(g_rooms[client->roomID].second->socket, mess, (j + 1), 0);
 						printf("Send: %d bytes to: %s \n", iSendResult, g_rooms[client->roomID].second->name.c_str());
 
 						//Error handling.
@@ -308,14 +320,14 @@ void ClientSession(Client* client)
 		return;
 	}
 	
-	//At last remove the socket from the active sockets vector.
-	if (g_roomsIndecies.size() > 1)
-		g_roomsIndecies.erase(client->name);
-	else
-		g_roomsIndecies.clear();
-
-	if (client->loggedIn)
+	if (client->inRoom)
 	{
+		//At last remove the socket from the active sockets vector.
+		if (g_roomsIndecies.size() > 1)
+			g_roomsIndecies.erase(client->name);
+		else
+			g_roomsIndecies.clear();
+
 		if (client == g_rooms[client->roomID].second)
 			g_rooms[client->roomID].second = nullptr;
 		else
@@ -330,12 +342,13 @@ void ClientSession(Client* client)
 	//Close the socket for good.
 	closesocket(client->socket);	
 
-	delete client;
-
 	if (g_clients.size() > 1)
 		g_clients.erase(g_clients.begin() + client->clientID);
 	else
 		g_clients.clear();
+
+	delete client;
+
 	return;
 }
 
@@ -386,6 +399,9 @@ void Server::Startup()
 		WSACleanup();
 		return;
 	}
+
+	dataBase = new DataBase();
+	dataBase->Connect();
 
 	this->Listen();
 }
@@ -460,6 +476,9 @@ void Server::Cleanup()
 	g_rooms.clear();
 	g_clients.clear();
 	g_roomsIndecies.clear();
+
+	dataBase->Disconnect();
+	delete dataBase;
 
 	//Close Socket and Cleanup.
 	closesocket(this->ListenSocket);

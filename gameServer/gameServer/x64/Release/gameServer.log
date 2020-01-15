@@ -1,10 +1,7 @@
-﻿  main.cpp
-  server.cpp
-c:\users\raffi\documents\gameserver\gameserver\gameserver\server.cpp(196): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
-c:\users\raffi\documents\gameserver\gameserver\gameserver\server.cpp(206): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+﻿  server.cpp
   Generating code
-  5 of 653 functions ( 0.8%) were compiled, the rest were copied from previous compilation.
+  0 of 694 functions ( 0.0%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    1 functions had inline decision re-evaluated but remain unchanged
+    0 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   gameServer.vcxproj -> C:\Users\raffi\Documents\GameServer\gameServer\x64\Release\gameServer.exe
