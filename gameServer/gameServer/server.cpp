@@ -69,7 +69,7 @@ void ClientSession(Client* client)
 				//Database check
 				char c[1];
 				
-				if (dataBase->LoginQuery(loginData.name, loginData.password))
+				if (true)//dataBase->LoginQuery(loginData.name, loginData.password))
 				{
 					c[0] = 1;
 					client->loggedIn = true;
@@ -89,7 +89,7 @@ void ClientSession(Client* client)
 					return;
 				}
 
-				if (c[0] == 1)
+				if (client->loggedIn)
 				{
 					if (g_rooms.size() != 0)
 					{
@@ -204,18 +204,16 @@ void ClientSession(Client* client)
 					{
 						char mess[16];
 
-						int j = 0;
 						for (int i = 0; i < 15; i++)
 						{
-							mess[i] = g_rooms[client->roomID].first->ip[i];
-							j++;
+							mess[i] = g_rooms[client->roomID].second->ip[i];
 
-							if (g_rooms[client->roomID].first->ip[i] == '\0') break;
+							if (g_rooms[client->roomID].second->ip[i] == '\0') break;
 						}
-						j++;
-						mess[j] = 1;
 
-						iSendResult = send(g_rooms[client->roomID].first->socket, mess, (j + 1), 0);
+						mess[15] = 1;
+
+						iSendResult = send(g_rooms[client->roomID].first->socket, mess, 16, 0);
 						printf("Send: %d bytes to: %s \n", iSendResult, g_rooms[client->roomID].first->name.c_str());
 
 						//Error handling.
@@ -225,9 +223,16 @@ void ClientSession(Client* client)
 							return;
 						}
 
-						mess[j] = 0;
+						for (int i = 0; i < 15; i++)
+						{
+							mess[i] = g_rooms[client->roomID].first->ip[i];
 
-						iSendResult = send(g_rooms[client->roomID].second->socket, mess, (j + 1), 0);
+							if (g_rooms[client->roomID].first->ip[i] == '\0') break;
+						}
+
+						mess[15] = 0;
+
+						iSendResult = send(g_rooms[client->roomID].second->socket, mess, 16, 0);
 						printf("Send: %d bytes to: %s \n", iSendResult, g_rooms[client->roomID].second->name.c_str());
 
 						//Error handling.
