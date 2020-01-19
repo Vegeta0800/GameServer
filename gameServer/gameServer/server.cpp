@@ -1,4 +1,5 @@
-#define _WINSOCK_DEPRECATED_NO_WARNINGS
+
+#define _WINSOCK_DEPRECATED_NO_WARNINGS //define to use functions from winsock that arent allowed otherwise
 
 //EXTERNAL INCLUDES
 #include <winsock2.h>
@@ -8,7 +9,7 @@
 #include <unordered_map>
 #include <string>
 #include <thread>
-
+//INTERNAL INCLUDES
 #include "server.h"
 #include "database.h"
 
@@ -19,48 +20,54 @@
 #define DEFAULT_BUFLEN sizeof(LoginData)
 
 //Global variables so the other threads can use their information.
-
-std::vector<Client*> g_clients;
-std::vector<std::pair<Client*, Client*>> g_rooms;
-std::unordered_map<std::string, int> g_roomsIndecies;
+std::vector<Client*> g_clients; //all clients
+std::vector<std::pair<Client*, Client*>> g_rooms; //All active rooms
+std::unordered_map<std::string, int> g_roomsIndecies; //rooms indecies 
 
 DataBase* dataBase;
 
 //Handels one clients data. Recieves data from one client.
-//Then Sends it to all the other clients.
+//Then Sends it to all the other clients accordingly.
 void ClientSession(Client* client)
 {
-	//Recieve and Send Data
-	int iResult; //Bytes recieved
-	int iSendResult;
-	char buff[DEFAULT_BUFLEN];
+	int iResult; //Result for recieve functions
+	int iSendResult; //Result for send functions
+	char buff[DEFAULT_BUFLEN]; //Buffer
 
+	//If room creation or update failed
 	bool roomError = false;
 
 	// Receive until the peer shuts down the connection
 	do
 	{
+		//Set buffer to null and iResult to 0
 		memset(buff, 0, DEFAULT_BUFLEN);
 		iResult = 0;
 
 		//Recieve data from the clientSocket.
 		if (!client->loggedIn)
 		{
+			//If not logged in yet receive login data
 			iResult = recv(client->socket, buff, sizeof(LoginData), 0);
 		}
 		else if(client->loggedIn && !client->inRoom)
 		{
+			//If logged in but not in room yet receive room data
 			iResult = recv(client->socket, buff, sizeof(RoomData), 0);
 		}
 		else
 		{
+			//Otherwise receive bools
 			iResult = recv(client->socket, buff, 1, 0);
 		}
 
+		//If data received isnt a shutdown or an error message
 		if (iResult > 0)
 		{
+			//If client isnt logged in yet
 			if (!client->loggedIn)
 			{
+				//Cast buffer to LoginData
 				LoginData loginData = LoginData();
 				loginData = *(LoginData*)&buff;
 
@@ -68,9 +75,11 @@ void ClientSession(Client* client)
 
 				//Database check
 				char c[1];
-				
-				if (true)//dataBase->LoginQuery(loginData.name, loginData.password))
+
+				//Check if login data is registered in database
+				if (dataBase->LoginQuery(loginData.name, loginData.password))
 				{
+					//If so client is logged in
 					c[0] = 1;
 					client->loggedIn = true;
 					client->name = loginData.name;
@@ -79,6 +88,7 @@ void ClientSession(Client* client)
 					c[0] = 0;
 
 
+				//Send result
 				iSendResult = send(client->socket, c, 1, 0);
 				printf("Send: %d bytes to: %s \n", iSendResult, client->ip.c_str());
 
@@ -89,14 +99,19 @@ void ClientSession(Client* client)
 					return;
 				}
 
+				//If client's login attempt was succesful
 				if (client->loggedIn)
 				{
+					//If there are open rooms
 					if (g_rooms.size() != 0)
 					{
+						//For all rooms
 						for (int i = 0; i < g_rooms.size(); i++)
 						{
+							//Send room data to client
 							RoomData data = RoomData();
 
+							//Set room name 
 							memset(data.name, 0, 32);
 							for (int j = 0; j < 32; j++)
 							{
@@ -105,8 +120,10 @@ void ClientSession(Client* client)
 								if (g_rooms[i].first->name[j] == '\0') break;
 							}
 
-							data.created = true;
+							//Created false
+							data.created = false;
 
+							//Send data
 							int iSendResult = send(client->socket, (const char*)&data, sizeof(RoomData), 0);
 							printf("Send: %d bytes to: %s \n", iSendResult, client->ip.c_str());
 
@@ -120,8 +137,10 @@ void ClientSession(Client* client)
 					}
 				}
 			}
+			//Else
 			else
 			{
+				//If client isnt in a room yet
 				if (!client->inRoom)
 				{
 					RoomData data = RoomData();
@@ -197,13 +216,21 @@ void ClientSession(Client* client)
 
 					roomError = false;
 				}
+				//Otherwise
 				else
 				{
+					//TODO OUT OF GAME
+
+					//Clients ready state is received
 					client->ready = buff[0];
+
+					//If both clients in a room are ready
 					if (g_rooms[client->roomID].first->ready && g_rooms[client->roomID].second->ready)
 					{
+						//Create message
 						char mess[16];
 
+						//With the joined users IP address
 						for (int i = 0; i < 15; i++)
 						{
 							mess[i] = g_rooms[client->roomID].second->ip[i];
@@ -211,8 +238,10 @@ void ClientSession(Client* client)
 							if (g_rooms[client->roomID].second->ip[i] == '\0') break;
 						}
 
+						//And host as true
 						mess[15] = 1;
 
+						//And send it to the host
 						iSendResult = send(g_rooms[client->roomID].first->socket, mess, 16, 0);
 						printf("Send: %d bytes to: %s \n", iSendResult, g_rooms[client->roomID].first->name.c_str());
 
@@ -223,6 +252,9 @@ void ClientSession(Client* client)
 							return;
 						}
 
+						//Afterwards 
+
+						//Set message to the hosts IP address
 						for (int i = 0; i < 15; i++)
 						{
 							mess[i] = g_rooms[client->roomID].first->ip[i];
@@ -230,8 +262,10 @@ void ClientSession(Client* client)
 							if (g_rooms[client->roomID].first->ip[i] == '\0') break;
 						}
 
+						//And the joined bool
 						mess[15] = 0;
 
+						//Send message
 						iSendResult = send(g_rooms[client->roomID].second->socket, mess, 16, 0);
 						printf("Send: %d bytes to: %s \n", iSendResult, g_rooms[client->roomID].second->name.c_str());
 
@@ -242,6 +276,7 @@ void ClientSession(Client* client)
 							return;
 						}
 
+						//Set ingame to true
 						g_rooms[client->roomID].first->inGame = true;
 						g_rooms[client->roomID].second->inGame = true;
 					}
@@ -254,16 +289,19 @@ void ClientSession(Client* client)
 		{
 			printf("Connection to %s closing...\n", client->ip.c_str());
 
+			//If connection is closing while in a room and logged in
 			if (client->loggedIn && client->inRoom)
 			{
+				//Delete/Update room client is in
 				RoomData data = RoomData();
 				data.deleted = true;
 
 				if (client->host)
-					data.created = true;
+					data.created = true; //Delete
 				else
-					data.created = false;
+					data.created = false; //Update
 
+				//Set name of room
 				memset(data.name, 0, 32);
 				for (int j = 0; j < 32; j++)
 				{
@@ -281,6 +319,8 @@ void ClientSession(Client* client)
 					}
 				}
 
+				//Send message to all logged in clients that are not this client
+				//Send close message to client
 				for (Client* c: g_clients)
 				{
 					if (c != client && c->loggedIn)
@@ -295,12 +335,81 @@ void ClientSession(Client* client)
 							return;
 						}
 					}
+					//If c is the client
 					else if (c == client)
 					{
+						//Send close message to client
 						char b = 0;
 
 						iSendResult = send(c->socket, &b, 1	, 0);
-						printf("Closing connection with %s \n", c->name.c_str());
+
+						//Error handling.
+						if (iSendResult == SOCKET_ERROR)
+						{
+							printf("Sending data failed. Error code: %d\n", WSAGetLastError());
+							return;
+						}
+					}
+				}
+			}
+		}
+		else
+		{
+			printf("Connection to %s closing...\n", client->ip.c_str());
+
+			//If connection is closing while in a room and logged in
+			if (client->loggedIn && client->inRoom)
+			{
+				//Delete/Update room client is in
+				RoomData data = RoomData();
+				data.deleted = true;
+
+				if (client->host)
+					data.created = true; //Delete
+				else
+					data.created = false; //Update
+
+				//Set name of room
+				memset(data.name, 0, 32);
+				for (int j = 0; j < 32; j++)
+				{
+					if (client->host)
+					{
+						data.name[j] = client->name[j];
+
+						if (client->name[j] == '\0') break;
+					}
+					else
+					{
+						data.name[j] = g_rooms[client->roomID].first->name[j];
+
+						if (g_rooms[client->roomID].first->name[j] == '\0') break;
+					}
+				}
+
+				//Send message to all logged in clients that are not this client
+				//Send close message to client
+				for (Client* c : g_clients)
+				{
+					if (c != client && c->loggedIn)
+					{
+						iSendResult = send(c->socket, (const char*)&data, sizeof(RoomData), 0);
+						printf("Send: %d bytes to: %s \n", iSendResult, c->name.c_str());
+
+						//Error handling.
+						if (iSendResult == SOCKET_ERROR)
+						{
+							printf("Sending data failed. Error code: %d\n", WSAGetLastError());
+							return;
+						}
+					}
+					//If c is the client
+					else if (c == client)
+					{
+						//Send close message to client
+						char b = 0;
+
+						iSendResult = send(c->socket, &b, 1, 0);
 
 						//Error handling.
 						if (iSendResult == SOCKET_ERROR)
@@ -325,9 +434,11 @@ void ClientSession(Client* client)
 		return;
 	}
 	
+	//If client was in a room
 	if (client->inRoom)
 	{
-		//At last remove the socket from the active sockets vector.
+		//Remove clients information from all relevant data
+
 		if (g_roomsIndecies.size() > 1)
 			g_roomsIndecies.erase(client->name);
 		else
@@ -347,16 +458,19 @@ void ClientSession(Client* client)
 	//Close the socket for good.
 	closesocket(client->socket);	
 
+	//At last erase client from clients vector
 	if (g_clients.size() > 1)
 		g_clients.erase(g_clients.begin() + client->clientID);
 	else
 		g_clients.clear();
 
+	//Delete client
 	delete client;
-
 	return;
 }
 
+
+//Startup server
 void Server::Startup()
 {
 	// Initialize Winsock
@@ -378,7 +492,7 @@ void Server::Startup()
 	this->ListenSocket = INVALID_SOCKET;
 
 	//Create Socket object. 
-	this->ListenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	this->ListenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP); //TCP
 
 	//Error handling.
 	if (this->ListenSocket == INVALID_SOCKET)
@@ -388,8 +502,9 @@ void Server::Startup()
 		return;
 	}
 
+	//Server sock address information
 	sockaddr_in service;
-	service.sin_family = AF_INET; //Ipv4 Address
+	service.sin_family = AF_INET; //IPv4 Address
 	service.sin_addr.s_addr = INADDR_ANY; //Any IP interface of server is connectable (LAN, public IP, etc).
 	service.sin_port = htons(DEFAULT_PORT); //Set port.
 
@@ -405,12 +520,16 @@ void Server::Startup()
 		return;
 	}
 
+	//Connect database
 	dataBase = new DataBase();
 	dataBase->Connect();
 
+	//Listen to clients
 	this->Listen();
 }
 
+
+//Listening for clients
 void Server::Listen()
 {
 	//Start listening to incoming connections.
@@ -429,10 +548,11 @@ void Server::Listen()
 	//Client Sockets
 	SOCKET ClientSocket;
 
+	//running server
 	bool running = true;
 
+	//Reserve 15 threads for 15 clients
 	std::vector<std::thread> threads;
-	threads.reserve(10);
 
 	while (running)
 	{
@@ -450,15 +570,23 @@ void Server::Listen()
 			ClientSocket = accept(this->ListenSocket, reinterpret_cast<SOCKADDR*>(&clientAddress), &addrlen);
 		}
 
+		//If max clients
+		if (threads.size() == 15)
+		{
+			running = false;
+			break;
+		}
+
 		//Convert the information to a string.
 		char* ip = inet_ntoa(clientAddress.sin_addr);
 		printf("Connected to: %s \n", ip);
 
+		//Create new client
 		Client* client = new Client();
 		client->ip = ip;
 		client->socket = ClientSocket;
 
-		//Save the socket and ip to the global variables.
+		//Save the client to vector
 		client->clientID = (uint8_t)g_clients.size();
 		g_clients.push_back(client);
 
@@ -466,22 +594,27 @@ void Server::Listen()
 		threads.push_back(std::thread(std::bind(ClientSession, client)));
 	}
 
+	//Let all threads join first
 	for (int i = 0; i < threads.size(); i++)
 	{
 		threads[i].join();
 	}
 
+	//Clear thread list
 	threads.clear();
 
+	//Cleanup the server
 	Cleanup();
 }
-
+//Server Cleanup
 void Server::Cleanup()
 {
+	//Clear all data lists
 	g_rooms.clear();
 	g_clients.clear();
 	g_roomsIndecies.clear();
 
+	//Disconnect and delete the database
 	dataBase->Disconnect();
 	delete dataBase;
 

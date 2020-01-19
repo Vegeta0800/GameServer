@@ -1,9 +1,13 @@
+
 #pragma once
+//EXTERNAL INCLUDES
 #include <winsock2.h>
 #include <string>
+//INTERNAL INCLUDES
 
 class DataBase;
 
+//Client struct
 struct Client
 {
 	SOCKET socket;
@@ -18,6 +22,7 @@ struct Client
 	bool inGame = false;
 };
 
+//Login Data without padding
 #pragma pack(push, 1)
 struct LoginData
 {
@@ -26,6 +31,7 @@ struct LoginData
 };
 #pragma pack(pop)
 
+//Room Data without padding
 #pragma pack(push, 1)
 struct RoomData
 {
@@ -35,13 +41,17 @@ struct RoomData
 };
 #pragma pack(pop)
 
+//Server class
 class Server
 {
 public:
+	//Startup server
 	void Startup();
 
 private:
+	//Listening for clients
 	void Listen();
+	//Server Cleanup
 	void Cleanup();
 	SOCKET ListenSocket;
 };
