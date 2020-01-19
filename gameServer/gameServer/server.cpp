@@ -120,8 +120,8 @@ void ClientSession(Client* client)
 								if (g_rooms[i].first->name[j] == '\0') break;
 							}
 
-							//Created false
-							data.created = false;
+							//Created true
+							data.created = true;
 
 							//Send data
 							int iSendResult = send(client->socket, (const char*)&data, sizeof(RoomData), 0);
