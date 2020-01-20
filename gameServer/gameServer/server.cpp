@@ -26,6 +26,71 @@ std::unordered_map<std::string, int> g_roomsIndecies; //rooms indecies
 
 DataBase* dataBase;
 
+void DestroyRoom(Client* client, bool del)
+{
+	//Delete/Update room client is in
+	RoomData data = RoomData();
+	data.deleted = true;
+
+	if (del)
+		data.created = true; //Delete
+	else
+		data.created = false; //Update
+
+	//Set name of room
+	memset(data.name, 0, 32);
+	for (int j = 0; j < 32; j++)
+	{
+		if (client->host)
+		{
+			data.name[j] = client->name[j];
+
+			if (client->name[j] == '\0') break;
+		}
+		else
+		{
+			data.name[j] = g_rooms[client->roomID].first->name[j];
+
+			if (g_rooms[client->roomID].first->name[j] == '\0') break;
+		}
+	}
+
+	int iSendResult;
+
+	//Send message to all logged in clients that are not this client
+	//Send close message to client
+	for (Client* c : g_clients)
+	{
+		if (c != client && c->loggedIn)
+		{
+			iSendResult = send(c->socket, (const char*)&data, sizeof(RoomData), 0);
+			printf("Send: %d bytes to: %s \n", iSendResult, c->name.c_str());
+
+			//Error handling.
+			if (iSendResult == SOCKET_ERROR)
+			{
+				printf("Sending data failed. Error code: %d\n", WSAGetLastError());
+				return;
+			}
+		}
+		//If c is the client
+		else if (c == client)
+		{
+			//Send close message to client
+			char b = 0;
+
+			iSendResult = send(c->socket, &b, 1, 0);
+
+			//Error handling.
+			if (iSendResult == SOCKET_ERROR)
+			{
+				printf("Sending data failed. Error code: %d\n", WSAGetLastError());
+				return;
+			}
+		}
+	}
+}
+
 //Handels one clients data. Recieves data from one client.
 //Then Sends it to all the other clients accordingly.
 void ClientSession(Client* client)
@@ -77,7 +142,7 @@ void ClientSession(Client* client)
 				char c[1];
 
 				//Check if login data is registered in database
-				if (dataBase->LoginQuery(loginData.name, loginData.password))
+				if (true)//dataBase->LoginQuery(loginData.name, loginData.password))
 				{
 					//If so client is logged in
 					c[0] = 1;
@@ -137,7 +202,7 @@ void ClientSession(Client* client)
 					}
 				}
 			}
-			//Else
+			//If logged in
 			else
 			{
 				//If client isnt in a room yet
@@ -219,66 +284,116 @@ void ClientSession(Client* client)
 				//Otherwise
 				else
 				{
-					//TODO OUT OF GAME
-
-					//Clients ready state is received
-					client->ready = buff[0];
-
-					//If both clients in a room are ready
-					if (g_rooms[client->roomID].first->ready && g_rooms[client->roomID].second->ready)
+					//If result came in
+					if (client->inGame)
 					{
-						//Create message
-						char mess[16];
+						g_rooms[client->roomID].first->inGame = false;
+						g_rooms[client->roomID].second->inGame = false;
 
-						//With the joined users IP address
-						for (int i = 0; i < 15; i++)
+						DestroyRoom(client, true);
+
+						if(client->host)
+							printf("%s won the game. And %s lost the game \n", client->name.c_str(), g_rooms[client->roomID].second->name.c_str());
+						else
+							printf("%s won the game. And %s lost the game \n", client->name.c_str(), g_rooms[client->roomID].first->name.c_str());
+
+						//If there are open rooms
+						if (g_rooms.size() != 0)
 						{
-							mess[i] = g_rooms[client->roomID].second->ip[i];
+							//For all rooms
+							for (int i = 0; i < g_rooms.size(); i++)
+							{
+								//Send room data to client
+								RoomData data = RoomData();
 
-							if (g_rooms[client->roomID].second->ip[i] == '\0') break;
+								//Set room name 
+								memset(data.name, 0, 32);
+								for (int j = 0; j < 32; j++)
+								{
+									data.name[j] = g_rooms[i].first->name[j];
+
+									if (g_rooms[i].first->name[j] == '\0') break;
+								}
+
+								//Created true
+								data.created = true;
+
+								//Send data
+								int iSendResult = send(client->socket, (const char*)&data, sizeof(RoomData), 0);
+								printf("Send: %d bytes to: %s \n", iSendResult, client->ip.c_str());
+
+								//Error handling.
+								if (iSendResult == SOCKET_ERROR)
+								{
+									printf("Sending data failed. Error code: %d\n", WSAGetLastError());
+									return;
+								}
+							}
 						}
+					}
+					else
+					{
+						//Clients ready state is received
+						client->ready = buff[0];
 
-						//And host as true
-						mess[15] = 1;
+						if (g_rooms[client->roomID].second == nullptr) continue;
 
-						//And send it to the host
-						iSendResult = send(g_rooms[client->roomID].first->socket, mess, 16, 0);
-						printf("Send: %d bytes to: %s \n", iSendResult, g_rooms[client->roomID].first->name.c_str());
-
-						//Error handling.
-						if (iSendResult == SOCKET_ERROR)
+						//If both clients in a room are ready
+						if (g_rooms[client->roomID].first->ready && g_rooms[client->roomID].second->ready)
 						{
-							printf("Sending data failed. Error code: %d\n", WSAGetLastError());
-							return;
+							//Create message
+							char mess[16];
+
+							//With the joined users IP address
+							for (int i = 0; i < 15; i++)
+							{
+								mess[i] = g_rooms[client->roomID].second->ip[i];
+
+								if (g_rooms[client->roomID].second->ip[i] == '\0') break;
+							}
+
+							//And host as true
+							mess[15] = 1;
+
+							//And send it to the host
+							iSendResult = send(g_rooms[client->roomID].first->socket, mess, 16, 0);
+							printf("Send: %d bytes to: %s \n", iSendResult, g_rooms[client->roomID].first->name.c_str());
+
+							//Error handling.
+							if (iSendResult == SOCKET_ERROR)
+							{
+								printf("Sending data failed. Error code: %d\n", WSAGetLastError());
+								return;
+							}
+
+							//Afterwards 
+
+							//Set message to the hosts IP address
+							for (int i = 0; i < 15; i++)
+							{
+								mess[i] = g_rooms[client->roomID].first->ip[i];
+
+								if (g_rooms[client->roomID].first->ip[i] == '\0') break;
+							}
+
+							//And the joined bool
+							mess[15] = 0;
+
+							//Send message
+							iSendResult = send(g_rooms[client->roomID].second->socket, mess, 16, 0);
+							printf("Send: %d bytes to: %s \n", iSendResult, g_rooms[client->roomID].second->name.c_str());
+
+							//Error handling.
+							if (iSendResult == SOCKET_ERROR)
+							{
+								printf("Sending data failed. Error code: %d\n", WSAGetLastError());
+								return;
+							}
+
+							//Set ingame to true
+							g_rooms[client->roomID].first->inGame = true;
+							g_rooms[client->roomID].second->inGame = true;
 						}
-
-						//Afterwards 
-
-						//Set message to the hosts IP address
-						for (int i = 0; i < 15; i++)
-						{
-							mess[i] = g_rooms[client->roomID].first->ip[i];
-
-							if (g_rooms[client->roomID].first->ip[i] == '\0') break;
-						}
-
-						//And the joined bool
-						mess[15] = 0;
-
-						//Send message
-						iSendResult = send(g_rooms[client->roomID].second->socket, mess, 16, 0);
-						printf("Send: %d bytes to: %s \n", iSendResult, g_rooms[client->roomID].second->name.c_str());
-
-						//Error handling.
-						if (iSendResult == SOCKET_ERROR)
-						{
-							printf("Sending data failed. Error code: %d\n", WSAGetLastError());
-							return;
-						}
-
-						//Set ingame to true
-						g_rooms[client->roomID].first->inGame = true;
-						g_rooms[client->roomID].second->inGame = true;
 					}
 				}
 			}
@@ -360,65 +475,7 @@ void ClientSession(Client* client)
 			//If connection is closing while in a room and logged in
 			if (client->loggedIn && client->inRoom)
 			{
-				//Delete/Update room client is in
-				RoomData data = RoomData();
-				data.deleted = true;
-
-				if (client->host)
-					data.created = true; //Delete
-				else
-					data.created = false; //Update
-
-				//Set name of room
-				memset(data.name, 0, 32);
-				for (int j = 0; j < 32; j++)
-				{
-					if (client->host)
-					{
-						data.name[j] = client->name[j];
-
-						if (client->name[j] == '\0') break;
-					}
-					else
-					{
-						data.name[j] = g_rooms[client->roomID].first->name[j];
-
-						if (g_rooms[client->roomID].first->name[j] == '\0') break;
-					}
-				}
-
-				//Send message to all logged in clients that are not this client
-				//Send close message to client
-				for (Client* c : g_clients)
-				{
-					if (c != client && c->loggedIn)
-					{
-						iSendResult = send(c->socket, (const char*)&data, sizeof(RoomData), 0);
-						printf("Send: %d bytes to: %s \n", iSendResult, c->name.c_str());
-
-						//Error handling.
-						if (iSendResult == SOCKET_ERROR)
-						{
-							printf("Sending data failed. Error code: %d\n", WSAGetLastError());
-							return;
-						}
-					}
-					//If c is the client
-					else if (c == client)
-					{
-						//Send close message to client
-						char b = 0;
-
-						iSendResult = send(c->socket, &b, 1, 0);
-
-						//Error handling.
-						if (iSendResult == SOCKET_ERROR)
-						{
-							printf("Sending data failed. Error code: %d\n", WSAGetLastError());
-							return;
-						}
-					}
-				}
+				DestroyRoom(client, client->host);
 			}
 		}
 	} while (iResult > 0);
