@@ -61,25 +61,10 @@ void DestroyRoom(Client* client, bool del)
 	//Send close message to client
 	for (Client* c : g_clients)
 	{
-		if (c != client && c->loggedIn)
+		if (c->loggedIn)
 		{
 			iSendResult = send(c->socket, (const char*)&data, sizeof(RoomData), 0);
 			printf("Send: %d bytes to: %s \n", iSendResult, c->name.c_str());
-
-			//Error handling.
-			if (iSendResult == SOCKET_ERROR)
-			{
-				printf("Sending data failed. Error code: %d\n", WSAGetLastError());
-				return;
-			}
-		}
-		//If c is the client
-		else if (c == client)
-		{
-			//Send close message to client
-			char b = 0;
-
-			iSendResult = send(c->socket, &b, 1, 0);
 
 			//Error handling.
 			if (iSendResult == SOCKET_ERROR)
